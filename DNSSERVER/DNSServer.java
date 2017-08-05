@@ -1,4 +1,3 @@
-
 package DNSSERVER;
 
 import java.io.DataInputStream;
@@ -9,7 +8,6 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Random;
 import java.util.logging.Level;
@@ -18,16 +16,15 @@ import org.json.simple.*;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-
 public class DNSServer extends Thread {
 
-    int port;
+    int port = 60500;
     ServerSocket server;
     ArrayList<Integer> dhtServers = new ArrayList<>();
+    ArrayList<Integer> cryptServers = new ArrayList<>();
 
     DNSServer() throws IOException {
-        this.port = port;
-        ServerSocket CreateServer = new ServerSocket(60500, 100);
+        ServerSocket CreateServer = new ServerSocket(port, 100);
         server = CreateServer;
     }
 
@@ -47,7 +44,7 @@ public class DNSServer extends Thread {
         public void run() {
             while (true) {
                 try {
-                    System.out.println("hi");
+
                     Socket serverSocket = server.accept();
                     Thread processRequest = new communicate(serverSocket);
                     processRequest.start();
@@ -67,20 +64,22 @@ public class DNSServer extends Thread {
             this.socket = socket;
         }
 
-        boolean addDHTServers(JSONObject requestJSON) {
+        boolean addServers(JSONObject requestJSON) {
             boolean added = true;
             try {
-                JSONArray dhtJOSNArray = (JSONArray) requestJSON.get("dht");
+                boolean isDHT = !(requestJSON.get("dht") == null);
+                JSONArray dhtJOSNArray = (JSONArray) (isDHT ? requestJSON.get("dht") : requestJSON.get("wellknownServers"));
                 Iterator<String> iterator = dhtJOSNArray.iterator();
                 while (iterator.hasNext()) {
-                    synchronized (dhtServers) {
-                        dhtServers.add(Integer.parseInt((iterator.next())));
+                    ArrayList<Integer> temp = (isDHT ? dhtServers : cryptServers);
+                    synchronized (temp) {
+                        temp.add(Integer.parseInt((iterator.next())));
                     }
                 }
             } catch (Exception e) {
                 added = false;
+
             }
-            System.out.println(Arrays.toString(dhtServers.toArray()));
             return added;
         }
 
@@ -88,7 +87,7 @@ public class DNSServer extends Thread {
             String response = "";
             JSONObject requestJSON = parseJSON(request);
             if (((String) requestJSON.get("type")).equals("POST") && requestJSON.get("dht") != null) {
-                boolean dhtAdded = addDHTServers(requestJSON);
+                boolean dhtAdded = addServers(requestJSON);
                 JSONObject obj = new JSONObject();
                 if (dhtAdded) {
                     obj.put("success", "1");
@@ -98,11 +97,36 @@ public class DNSServer extends Thread {
                 response = "[" + obj.toJSONString() + "]";
             } else if (((String) requestJSON.get("type")).equals("GET") && requestJSON.get("dht") != null) {
                 int n = dhtServers.size();
-                Random num = new Random();
-                int randomServer = num.nextInt(n);
                 JSONObject obj = new JSONObject();
-                obj.put("success", "1");
-                obj.put("dhtServers", dhtServers.get(randomServer) + "");
+                if (n == 0) {
+                    obj.put("success", "0");
+                } else {
+                    Random num = new Random();
+                    int randomServer = num.nextInt(n);
+                    obj.put("success", "1");
+                    obj.put("dhtServers", dhtServers.get(randomServer) + "");
+                }
+                response = "[" + obj.toJSONString() + "]";
+            } else if (((String) requestJSON.get("type")).equals("POST") && requestJSON.get("wellknownServers") != null) {
+                boolean dhtAdded = addServers(requestJSON);
+                JSONObject obj = new JSONObject();
+                if (dhtAdded) {
+                    obj.put("success", "1");
+                } else {
+                    obj.put("success", "0");
+                }
+                response = "[" + obj.toJSONString() + "]";
+            } else if (((String) requestJSON.get("type")).equals("GET") && requestJSON.get("wellknownServers") != null) {
+                int n = cryptServers.size();
+                JSONObject obj = new JSONObject();
+                if (n == 0) {
+                    obj.put("success", "0");
+                } else {
+                    Random num = new Random();
+                    int randomServer = num.nextInt(n);
+                    obj.put("success", "1");
+                    obj.put("dhtServers", cryptServers.get(randomServer) + "");
+                }
                 response = "[" + obj.toJSONString() + "]";
             }
             return response;
@@ -139,7 +163,6 @@ public class DNSServer extends Thread {
         public void run() {
             try {
                 String request = readRequest(socket);
-                System.out.println(request);
                 String response = createResponse(request);
                 sendResponse(response, socket);
             } catch (IOException ex) {
@@ -151,6 +174,5 @@ public class DNSServer extends Thread {
     public static void main(String args[]) throws ParseException, IOException {
         Thread DNSServer = new DNSServer();
         DNSServer.start();
-
     }
 }
