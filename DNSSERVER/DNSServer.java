@@ -1,8 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+
 package DNSSERVER;
 
 import java.io.DataInputStream;
@@ -22,10 +18,7 @@ import org.json.simple.*;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-/**
- *
- * @author Pratham
- */
+
 public class DNSServer extends Thread {
 
     int port;
