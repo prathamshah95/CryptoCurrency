@@ -15,6 +15,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.json.simple.*;
@@ -49,7 +50,7 @@ public class DNSServer extends Thread {
         Listen(ServerSocket server) {
             this.server = server;
         }
-        
+
         public void run() {
             while (true) {
                 try {
@@ -102,16 +103,14 @@ public class DNSServer extends Thread {
                     obj.put("success", "0");
                 }
                 response = "[" + obj.toJSONString() + "]";
-            }else if(((String) requestJSON.get("type")).equals("GET")&&requestJSON.get("dht") != null){
-                 int n=dhtServers.size();
-                 JSONArray dhtServersAddresses = new JSONArray();
-                 for(int i=0;i<n;i++){
-                   dhtServersAddresses.add(dhtServers.get(i)+"");
-                 }
-                 JSONObject obj = new JSONObject();
-                 obj.put("success","1");
-                 obj.put("dhtServers",dhtServersAddresses);
-                 response = "[" + obj.toJSONString() + "]";                 
+            } else if (((String) requestJSON.get("type")).equals("GET") && requestJSON.get("dht") != null) {
+                int n = dhtServers.size();
+                Random num = new Random();
+                int randomServer = num.nextInt(n);
+                JSONObject obj = new JSONObject();
+                obj.put("success", "1");
+                obj.put("dhtServers", dhtServers.get(randomServer) + "");
+                response = "[" + obj.toJSONString() + "]";
             }
             return response;
         }
