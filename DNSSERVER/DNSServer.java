@@ -49,48 +49,7 @@ public class DNSServer extends Thread {
         Listen(ServerSocket server) {
             this.server = server;
         }
-
-        String createResponse(String request) {
-            String response = "";
-            JSONObject requestJSON = parseJSON(request);
-            response = (String) requestJSON.get("type");
-            JSONArray msg = (JSONArray) requestJSON.get("dht");
-            Iterator<String> iterator = msg.iterator();
-            while (iterator.hasNext()) {
-                dhtServers.add(Integer.parseInt((iterator.next())));
-            }
-            System.out.println(Arrays.toString(dhtServers.toArray()));
-            return response;
-        }
-
-        String readRequest(Socket server) throws IOException {
-            String request = "";
-            InputStream inFromServer = server.getInputStream();
-            DataInputStream in = new DataInputStream(inFromServer);
-            request = in.readUTF();
-            return request;
-        }
-
-        void sendResponse(String response, Socket socket) throws IOException {
-            OutputStream outToServer = socket.getOutputStream();
-            DataOutputStream out = new DataOutputStream(outToServer);
-            out.writeUTF(response);
-            socket.close();
-        }
-
-        JSONObject parseJSON(String json) {
-            JSONObject obj2;
-            try {
-                JSONParser parser = new JSONParser();
-                JSONArray a = (JSONArray) parser.parse(json);
-                obj2 = (JSONObject) a.get(0);
-            } catch (ParseException ex) {
-                obj2 = null;
-                Logger.getLogger(DNSServer.class.getName()).log(Level.SEVERE, null, ex);
-            }
-            return obj2;
-        }
-
+        
         public void run() {
             while (true) {
                 try {
@@ -152,7 +111,7 @@ public class DNSServer extends Thread {
                  JSONObject obj = new JSONObject();
                  obj.put("success","1");
                  obj.put("dhtServers",dhtServersAddresses);
-                response = "[" + obj.toJSONString() + "]"; 
+                 response = "[" + obj.toJSONString() + "]";                 
             }
             return response;
         }
