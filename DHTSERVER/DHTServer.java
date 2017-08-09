@@ -282,8 +282,17 @@ public class DHTServer extends Thread {
                     responseJson.put("inserted", "1");
                 }
                 response = "[" + responseJson.toJSONString() + "]";
-            } else if (requestJSON.get("type").equals("GET") && requestJSON.get("key") != null) {
-
+            } else if (requestJSON.get("type").equals("GET") && requestJSON.get("key") != null) {                  
+                  int serverAddress = getNearestServer(requestJSON.get("key").toString());
+                  responseJson.put("success","1");                                    
+                  if (Integer.parseInt(dhtNodes.get(serverAddress).nodeId) == port) {
+                  responseJson.put("nearest","1");    
+                  responseJson.put("value", publicKeyMap.get(requestJSON.get("key").toString()));                  
+                  }else{
+                  responseJson.put("nearest","0");
+                  responseJson.put("address", dhtNodes.get(serverAddress).nodeId);
+                  }
+                  response = "[" + responseJson.toJSONString() + "]";
             } else if (requestJSON.get("type").equals("heartbeat")) {
                 responseJson.put("success", "1");
                 response = "[" + responseJson.toJSONString() + "]";
@@ -340,7 +349,6 @@ public class DHTServer extends Thread {
                 } catch (IOException ex) {
                     Logger.getLogger(DHTServer.class.getName()).log(Level.SEVERE, null, ex);
                 }
-
             }
         }
     }
