@@ -5,20 +5,23 @@
  */
 package DHTServers;
 
-import DNSSERVER.DNSServer;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Random;
@@ -39,7 +42,19 @@ public class DHTServer extends Thread {
     ServerSocket server;
     String myHash;
     ArrayList<dhtNodeHash> dhtNodes = new ArrayList<>();
-    HashMap<String, String> publicKeyMap = new HashMap<>();
+    HashMap<String, ipkeystore> publicKeyMap = new HashMap<>();
+    String myip;
+
+    class ipkeystore {
+
+        String publicKey;
+        String ip;
+
+        ipkeystore(String publicKey, String ip) {
+            this.ip = ip;
+            this.publicKey = publicKey;
+        }
+    }
 
     class dhtNodeHash {
 
@@ -47,7 +62,7 @@ public class DHTServer extends Thread {
         String nodeIdHash;
         int heartbeat;
 
-        dhtNodeHash(String nodeId) throws NoSuchAlgorithmException, UnsupportedEncodingException {
+        dhtNodeHash(String nodeId) throws NoSuchAlgorithmException, UnsupportedEncodingException, UnknownHostException {
             this.nodeId = nodeId;
             nodeIdHash = encryptPassword(nodeId + "");
             heartbeat = 0;
@@ -83,8 +98,31 @@ public class DHTServer extends Thread {
     public DHTServer(int port) throws IOException, NoSuchAlgorithmException {
         this.port = port;
         server = new ServerSocket(port, 100);
+        Enumeration<NetworkInterface> n = NetworkInterface.getNetworkInterfaces();
+        for (; n.hasMoreElements();) {
+            NetworkInterface e = n.nextElement();
+            //System.out.println("Interface: " + e.getName());
+            Enumeration<InetAddress> a = e.getInetAddresses();
 
-        myHash = encryptPassword(port + "");
+            for (; a.hasMoreElements();) {
+                InetAddress addr = a.nextElement();
+                myip = addr.getHostAddress();
+                break;
+            }
+            break;
+        }
+        myHash = encryptPassword(myip + "");
+        Socket client = new Socket("10.0.0.1", 60500);
+        OutputStream outToServer = client.getOutputStream();
+        DataOutputStream out = new DataOutputStream(outToServer);
+        JSONObject obj = new JSONObject();
+        JSONArray list = new JSONArray();
+        list.add(myip);
+        obj.put("type", "POST");
+        obj.put("dht", list);
+        out.writeUTF("[" + obj.toJSONString() + "]");
+        InputStream inFromServer = client.getInputStream();
+        DataInputStream in = new DataInputStream(inFromServer);
     }
 
     public void run() {
@@ -120,19 +158,47 @@ public class DHTServer extends Thread {
             obj2 = (JSONObject) a.get(0);
         } catch (ParseException ex) {
             obj2 = null;
-            Logger.getLogger(DNSServer.class.getName()).log(Level.SEVERE, null, ex);
         }
         return obj2;
     }
 
-    void addDHTServers(JSONArray dhtServers) throws NoSuchAlgorithmException, UnsupportedEncodingException {
+    class sendArrival extends Thread {
+
+        Socket socket;
+        String node;
+
+        sendArrival(String node) throws IOException {
+            socket = new Socket(node, 60501);
+            this.node = node;
+        }
+
+        public void run() {
+            try {
+
+                if (!(node.equals(myip))) {
+                    DataOutputStream out = createOutputStream(socket);
+                    JSONObject obj = new JSONObject();
+                    obj.put("type", "POST");
+                    obj.put("dht", myip);
+                    out.writeUTF("[" + obj.toJSONString() + "]");
+                    DataInputStream in = createInputStream(socket);
+                    in.readUTF();
+                }
+            } catch (IOException ex) {
+                Logger.getLogger(DHTServer.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    void addDHTServers(JSONArray dhtServers) throws NoSuchAlgorithmException, UnsupportedEncodingException, UnknownHostException, IOException {
 
         synchronized (dhtNodes) {
-
             int n = dhtServers == null ? 0 : dhtServers.size();
             for (int i = 0; i < n; i++) {
                 dhtNodeHash node = new dhtNodeHash(dhtServers.get(i).toString());
                 dhtNodes.add(node);
+                Thread addMe = new sendArrival(node.nodeId);
+                addMe.start();
             }
             Collections.sort(dhtNodes, new sortNodes());
             for (int i = 0; i < n; i++) {
@@ -146,7 +212,7 @@ public class DHTServer extends Thread {
         public void run() {
 
             try {
-                Socket socket = new Socket("localhost", 60500);
+                Socket socket = new Socket("10.0.0.1", 60500);
                 DataOutputStream write = createOutputStream(socket);
                 JSONObject obj = new JSONObject();
                 addPropertyToJSONArray("type", "GET", obj);
@@ -255,9 +321,10 @@ public class DHTServer extends Thread {
                         int serverAddress = getNearestServer(key);
                         JSONObject insert = new JSONObject();
                         insert.put("key", key);
-                        insert.put("value", publicKeyMap.get(key));
+                        insert.put("ip", publicKeyMap.get(key).ip);
+                        insert.put("publickey", publicKeyMap.get(key).publicKey);
                         insert.put("redistribute", "1");
-                        Thread backup = new insertBackup(insert, Integer.parseInt(dhtNodes.get(serverAddress).nodeId));
+                        Thread backup = new insertBackup(insert, dhtNodes.get(serverAddress).nodeId);
                         backup.start();
                     } catch (NoSuchAlgorithmException ex) {
                         Logger.getLogger(DHTServer.class.getName()).log(Level.SEVERE, null, ex);
@@ -289,25 +356,26 @@ public class DHTServer extends Thread {
                         try {
                             int serverAddress = getNearestServer(key);
                             if (serverAddress == (index + 1) % (dhtNodes.size())) {
-                                Socket socket = new Socket("localhost", Integer.parseInt(dhtNodes.get(serverAddress).nodeId));
+                                Socket socket = new Socket(dhtNodes.get(serverAddress).nodeId, port);
                                 DataOutputStream out = createOutputStream(socket);
                                 JSONObject requestBackup = new JSONObject();
                                 requestBackup.put("type", "POST");
                                 requestBackup.put("key", key);
-                                requestBackup.put("value", publicKeyMap.get(key));
+                                requestBackup.put("ip", publicKeyMap.get(key).ip);
+                                requestBackup.put("publickey", publicKeyMap.get(key).publicKey);
                                 out.writeUTF("[" + requestBackup.toJSONString() + "]");
                                 DataInputStream in = createInputStream(socket);
                                 socket.close();
-                            } else if (serverAddress == (index + 2) % (dhtNodes.size())) {
-                                publicKeyMap.remove(key);
-
                             } else if (serverAddress == index) {
                                 JSONObject request = new JSONObject();
                                 request.put("key", key);
-                                request.put("value", publicKeyMap.get(key));
+                                request.put("ip", publicKeyMap.get(key).ip);
+                                request.put("publickey", publicKeyMap.get(key).publicKey);
                                 request.put("type", "POST");
-                                Thread insertBackup = new insertBackup(request, Integer.parseInt(dhtNodes.get((index + 1) % (dhtNodes.size())).nodeId));
+                                Thread insertBackup = new insertBackup(request, dhtNodes.get((index + 1) % (dhtNodes.size())).nodeId);
                                 insertBackup.start();
+                            } else if (serverAddress == (index + 2) % (dhtNodes.size())) {
+                                publicKeyMap.remove(key);
                             }
                         } catch (NoSuchAlgorithmException ex) {
                             Logger.getLogger(DHTServer.class.getName()).log(Level.SEVERE, null, ex);
@@ -321,7 +389,7 @@ public class DHTServer extends Thread {
                     for (String key : publicKeyMap.keySet()) {
                         try {
                             int serverAddress = getNearestServer(key);
-                            if (dhtNodes.get(serverAddress).nodeId == dhtNodes.get((index + 2) % dhtNodes.size()).nodeId) {
+                            if (dhtNodes.get(serverAddress).nodeId.equals(dhtNodes.get((index + 2) % dhtNodes.size()).nodeId)) {
                                 publicKeyMap.remove(key);
                             }
                         } catch (Exception ex) {
@@ -336,17 +404,19 @@ public class DHTServer extends Thread {
                             if (serverAddress == index) {
                                 JSONObject request = new JSONObject();
                                 request.put("key", key);
-                                request.put("value", publicKeyMap.get(key));
+                                request.put("ip", publicKeyMap.get(key).ip);
+                                request.put("publickey", publicKeyMap.get(key).publicKey);
                                 request.put("type", "POST");
-                                Thread insertBackup = new insertBackup(request, Integer.parseInt(dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1))).nodeId));
+                                Thread insertBackup = new insertBackup(request, dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1))).nodeId);
                                 insertBackup.start();
                             } else if (serverAddress == (index - 1 + dhtNodes.size()) % (dhtNodes.size())) {
-                                Socket socket = new Socket("localhost", Integer.parseInt(dhtNodes.get(serverAddress).nodeId));
+                                Socket socket = new Socket(dhtNodes.get(serverAddress).nodeId, port);
                                 DataOutputStream out = createOutputStream(socket);
                                 JSONObject requestBackup = new JSONObject();
                                 requestBackup.put("type", "POST");
                                 requestBackup.put("key", key);
-                                requestBackup.put("value", publicKeyMap.get(key));
+                                requestBackup.put("ip", publicKeyMap.get(key).ip);
+                                requestBackup.put("publickey", publicKeyMap.get(key).publicKey);
                                 out.writeUTF("[" + requestBackup.toJSONString() + "]");
                                 DataInputStream in = createInputStream(socket);
                                 socket.close();
@@ -360,7 +430,6 @@ public class DHTServer extends Thread {
                         } catch (IOException ex) {
                             Logger.getLogger(DHTServer.class.getName()).log(Level.SEVERE, null, ex);
                         }
-
                     }
 
                 }
@@ -371,21 +440,22 @@ public class DHTServer extends Thread {
         class insertBackup extends Thread {
 
             JSONObject request;
-            int port;
+            String ip;
 
-            public insertBackup(JSONObject request, int port) {
+            public insertBackup(JSONObject request, String ip) {
                 this.request = request;
-                this.port = port;
+                this.ip = ip;
             }
 
             public void run() {
                 try {
-                    Socket socket = new Socket("localhost", port);
+                    Socket socket = new Socket(ip, port);
                     DataOutputStream out = createOutputStream(socket);
                     JSONObject requestBackup = new JSONObject();
                     requestBackup.put("type", "POST");
                     requestBackup.put("key", request.get("key").toString());
-                    requestBackup.put("value", request.get("value").toString());
+                    requestBackup.put("ip", request.get("ip").toString());
+                    requestBackup.put("publickey", request.get("publickey").toString());
                     if (request.get("redistribute") == null) {
                         requestBackup.put("backup", "1");
                     }
@@ -402,16 +472,18 @@ public class DHTServer extends Thread {
             String response = "";
             JSONObject requestJSON = parseJSON(request);
             JSONObject responseJson = new JSONObject();
-            if (requestJSON.get("type").equals("POST") && requestJSON.get("key") != null && requestJSON.get("value") != null) {
+            if (requestJSON.get("type").equals("POST") && requestJSON.get("key") != null && requestJSON.get("ip") != null && requestJSON.get("publickey") != null) {
                 if (requestJSON.get("backup") == null) {
                     int serverAddress = getNearestServer(requestJSON.get("key").toString());
                     int n = dhtNodes.size();
 
-                    if (Integer.parseInt(dhtNodes.get(serverAddress).nodeId) == port) {
-                        publicKeyMap.put(requestJSON.get("key").toString(), requestJSON.get("value").toString());
-                        Thread backup1 = new insertBackup(requestJSON, Integer.parseInt(dhtNodes.get((serverAddress + 1) % n).nodeId));
+                    if (dhtNodes.get(serverAddress).nodeId.equals(myip)) {
+                        ipkeystore store = new ipkeystore(requestJSON.get("publickey").toString(), requestJSON.get("ip").toString());
+                        publicKeyMap.put(requestJSON.get("key").toString(), store);
+                        System.out.println(requestJSON.get("key").toString() + " " + myip);
+                        Thread backup1 = new insertBackup(requestJSON, dhtNodes.get((serverAddress + 1) % n).nodeId);
                         backup1.start();
-                        Thread backup2 = new insertBackup(requestJSON, Integer.parseInt(dhtNodes.get((serverAddress == 0 ? (n - 1) : serverAddress - 1)).nodeId));
+                        Thread backup2 = new insertBackup(requestJSON, dhtNodes.get((serverAddress == 0 ? (n - 1) : serverAddress - 1)).nodeId);
                         backup2.start();
                         responseJson.put("success", "1");
                         responseJson.put("inserted", "1");
@@ -421,16 +493,19 @@ public class DHTServer extends Thread {
                         responseJson.put("address", dhtNodes.get(serverAddress).nodeId);
                     }
                 } else {
-                    publicKeyMap.put(requestJSON.get("key").toString(), requestJSON.get("value").toString());
+                    ipkeystore store = new ipkeystore(requestJSON.get("publickey").toString(), requestJSON.get("ip").toString());
+                    publicKeyMap.put(requestJSON.get("key").toString(), store);
+                    System.out.println(requestJSON.get("key").toString() + "backup" + myip);
                     responseJson.put("success", "1");
                     responseJson.put("inserted", "1");
                 }
                 response = "[" + responseJson.toJSONString() + "]";
             } else if (requestJSON.get("type").equals("GET") && requestJSON.get("key") != null) {
                 int serverAddress = getNearestServer(requestJSON.get("key").toString());
-                if (Integer.parseInt(dhtNodes.get(serverAddress).nodeId) == port) {
+                if (dhtNodes.get(serverAddress).nodeId.equals(myip)) {
                     responseJson.put("nearest", "1");
-                    responseJson.put("value", publicKeyMap.get(requestJSON.get("key").toString()));
+                    responseJson.put("ip", publicKeyMap.get(requestJSON.get("key").toString()).ip);
+                    responseJson.put("publickey", publicKeyMap.get(requestJSON.get("key").toString()).publicKey);
                 } else {
                     JSONArray nearest = new JSONArray();
                     nearest.add(dhtNodes.get(serverAddress).nodeId);
@@ -458,10 +533,10 @@ public class DHTServer extends Thread {
                         }
                     }
 
-                    if (index != -1 && (dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1)) % (dhtNodes.size())).nodeId.equals(port + ""))) {
+                    if (index != -1 && (dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1)) % (dhtNodes.size())).nodeId.equals(myip + ""))) {
                         Thread redisributeKeyThread = new redistributeKey(index, failedHash, 1);
                         redisributeKeyThread.start();
-                    } else if (index != -1 && dhtNodes.get(index % (dhtNodes.size())).nodeId.equals(port + "")) {
+                    } else if (index != -1 && dhtNodes.get(index % (dhtNodes.size())).nodeId.equals(myip + "")) {
                         Thread redisributeKeyThread = new redistributeKey(index, failedHash, 0);
                         redisributeKeyThread.start();
                     }
@@ -485,14 +560,14 @@ public class DHTServer extends Thread {
                     } else {
                         dhtNodes.add(index, new dhtNodeHash(requestJSON.get("dht").toString()));
                     }
-
-                    if (Integer.parseInt(dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1)) % (dhtNodes.size())).nodeId) == port) {
+                    System.out.println(requestJSON.get("dht").toString() + "to" + myip);
+                    if ((dhtNodes.get(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1)) % (dhtNodes.size())).nodeId).equals(myip)) {
                         Thread add = new addNode(((index - 1) == -1 ? (dhtNodes.size() - 1) : (index - 1)) % (dhtNodes.size()), 1);
                         add.start();
-                    } else if (Integer.parseInt(dhtNodes.get((index + 1) % (dhtNodes.size())).nodeId) == port) {
+                    } else if ((dhtNodes.get((index + 1) % (dhtNodes.size())).nodeId).equals(myip)) {
                         Thread add = new addNode((index + 1) % (dhtNodes.size()), 0);
                         add.start();
-                    } else if (Integer.parseInt(dhtNodes.get((index - 2 + dhtNodes.size()) % (dhtNodes.size())).nodeId) == port) {
+                    } else if ((dhtNodes.get((index - 2 + dhtNodes.size()) % (dhtNodes.size())).nodeId).equals(myip)) {
                         Thread add = new addNode((index - 2 + dhtNodes.size()) % (dhtNodes.size()), -1);
                         add.start();
                     }
@@ -533,7 +608,7 @@ public class DHTServer extends Thread {
         public void run() {
             for (int i = 0; i < dhtNodes.size(); i++) {
                 try {
-                    Socket socket = new Socket("localhost", Integer.parseInt(dhtNodes.get(i).nodeId));
+                    Socket socket = new Socket(dhtNodes.get(i).nodeId, port);
                     DataOutputStream out = createOutputStream(socket);
                     JSONObject deleteDHT = new JSONObject();
                     deleteDHT.put("type", "DELETE");
@@ -546,7 +621,7 @@ public class DHTServer extends Thread {
                 }
             }
             try {
-                Socket socket = new Socket("localhost", 60500);
+                Socket socket = new Socket("10.0.0.1", 60500);
                 DataOutputStream out = createOutputStream(socket);
                 JSONObject deleteDHT = new JSONObject();
                 deleteDHT.put("type", "DELETE");
@@ -577,9 +652,9 @@ public class DHTServer extends Thread {
             while (true) {
                 for (int i = 0; i < dhtNodes.size(); i++) {
                     dhtNodeHash node = dhtNodes.get(i);
-                    if (Integer.parseInt(node.nodeId) != port) {
+                    if (!(node.nodeId.equals(myip))) {
                         try {
-                            Socket socket = new Socket("localhost", Integer.parseInt(node.nodeId));
+                            Socket socket = new Socket(node.nodeId, 60501);
                             socket.setSoTimeout(2000);
                             DataOutputStream out = createOutputStream(socket);
                             JSONObject request = createRequestJSON();
@@ -588,6 +663,7 @@ public class DHTServer extends Thread {
                             JSONObject response = parseJSON(in.readUTF());
                             if (response.get("success").equals("1")) {
                                 node.heartbeat = 0;
+                                System.out.println(node.nodeId);
                             }
                         } catch (Exception ex) {
                             node.heartbeat++;
@@ -611,10 +687,7 @@ public class DHTServer extends Thread {
     }
 
     public static void main(String args[]) throws IOException, NoSuchAlgorithmException {
-        for (int i = 0; i < 4; i++) {
-            Thread dhtserver = new DHTServer(60101 + i);
-            dhtserver.start();
-        }
-
+        Thread dhtserver = new DHTServer(60501);
+        dhtserver.start();
     }
 }
