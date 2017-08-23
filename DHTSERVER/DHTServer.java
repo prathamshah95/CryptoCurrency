@@ -487,6 +487,7 @@ public class DHTServer extends Thread {
                         backup2.start();
                         responseJson.put("success", "1");
                         responseJson.put("inserted", "1");
+                        
                     } else {
                         responseJson.put("success", "1");
                         responseJson.put("inserted", "0");
