@@ -74,7 +74,7 @@ public class DNSServer extends Thread {
                 while (iterator.hasNext()) {
                     ArrayList<String> temp = (isDHT ? dhtServers : cryptServers);
                     synchronized (temp) {
-                        temp.add(iterator.next());                        
+                        temp.add(iterator.next());
                     }
                 }
             } catch (Exception e) {
@@ -89,10 +89,10 @@ public class DNSServer extends Thread {
             JSONObject obj = new JSONObject();
             if (((String) requestJSON.get("type")).equals("POST") && requestJSON.get("dht") != null) {
                 boolean dhtAdded = addServers(requestJSON);
-                  int n=dhtServers.size();
-                  for(int i=0;i<n;i++){
-                  System.out.println(dhtServers.get(i));
-                  }
+                int n = dhtServers.size();
+                for (int i = 0; i < n; i++) {
+                    System.out.println(dhtServers.get(i));
+                }
                 if (dhtAdded) {
                     obj.put("success", "1");
                 } else {
@@ -112,14 +112,23 @@ public class DNSServer extends Thread {
                 }
             } else if (((String) requestJSON.get("type")).equals("POST") && requestJSON.get("wellknownServers") != null) {
                 boolean dhtAdded = addServers(requestJSON);
-                if (dhtAdded) {
-                    obj.put("success", "1");
+                System.out.println(dhtAdded);
+                if (dhtAdded) {                    
+                    int n = dhtServers.size();
+                    System.out.println(n);
+                    if (n != 0) {
+                        Random r = new Random();
+                        obj.put("success", "1");
+                        obj.put("dht", dhtServers.get(r.nextInt(n)).toString());
+                    }
+                   // obj.put("success", "0");
                 } else {
                     obj.put("success", "0");
                 }
+
             } else if (((String) requestJSON.get("type")).equals("GET") && requestJSON.get("wellknownServers") != null) {
                 int n = cryptServers.size();
-                       JSONArray cryptRegisteredServers = new JSONArray();
+                JSONArray cryptRegisteredServers = new JSONArray();
                 if (n == 0) {
                     obj.put("success", "0");
                 } else {
@@ -127,11 +136,7 @@ public class DNSServer extends Thread {
                         cryptRegisteredServers.add(cryptServers.get(i).toString());
                     }
                     obj.put("success", "1");
-                    obj.put("dhtServers", cryptRegisteredServers);
-                  /* Random num = new Random();
-                    int randomServer = num.nextInt(n);
-                    obj.put("success", "1");
-                    obj.put("dhtServers", cryptServers.get(randomServer) + "");*/
+                    obj.put("wellknownServers", cryptRegisteredServers);
                 }
             } else if ((requestJSON.get("type").toString()).equals("DELETE") && requestJSON.get("dht") != null) {
                 synchronized (dhtServers) {
