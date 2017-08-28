@@ -74,7 +74,9 @@ public class DNSServer extends Thread {
                 while (iterator.hasNext()) {
                     ArrayList<String> temp = (isDHT ? dhtServers : cryptServers);
                     synchronized (temp) {
-                        temp.add(iterator.next());
+                        String s = iterator.next();
+                        temp.remove(s);
+                        temp.add(s);
                     }
                 }
             } catch (Exception e) {
@@ -113,7 +115,7 @@ public class DNSServer extends Thread {
             } else if (((String) requestJSON.get("type")).equals("POST") && requestJSON.get("wellknownServers") != null) {
                 boolean dhtAdded = addServers(requestJSON);
                 System.out.println(dhtAdded);
-                if (dhtAdded) {                    
+                if (dhtAdded) {
                     int n = dhtServers.size();
                     System.out.println(n);
                     if (n != 0) {
@@ -121,7 +123,7 @@ public class DNSServer extends Thread {
                         obj.put("success", "1");
                         obj.put("dht", dhtServers.get(r.nextInt(n)).toString());
                     }
-                   // obj.put("success", "0");
+                    // obj.put("success", "0");
                 } else {
                     obj.put("success", "0");
                 }
