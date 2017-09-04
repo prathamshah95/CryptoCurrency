@@ -588,7 +588,7 @@ public class CryptoNode extends Thread {
                 } else if (requestJSON.get("type").toString().equals("2Phase1")) {
                     Random r = new Random();
                     int commit = r.nextInt(2);
-                    commit=1;
+                    commit = 1;
                     responseJSON.put("success", "1");
                     responseJSON.put("ack", commit + "");
                     System.out.println(commit);
@@ -770,6 +770,25 @@ public class CryptoNode extends Thread {
                 } else if (requestJSON.get("type").toString().equals("getblocks")) {
                     Thread sendBlock = new sendBlock(requestJSON.get("ip").toString());
                     sendBlock.start();
+                } else if (requestJSON.get("type").toString().equals("printtxhash")) {
+                    if (head != null) {
+                        blockChain temp = head;
+                        while (temp != null) {
+                            ArrayList<transaction> tx = temp.tx;
+                            int n = tx.size();
+                            for (int i = 0; i < n; i++) {
+                                System.out.println(tx.get(i).txHash);
+                            }
+                            temp = temp.previous;
+                        }
+                    }
+                    JSONObject obj = new JSONObject();
+                    obj.put("type", "printtxhash");
+                    if (requestJSON.get("ip") != null && requestJSON.get("ip").toString().equals(myIp)) {
+                        Thread broadcastMsg = new broadcast(obj.toJSONString(), "printtxhash");
+                        broadcastMsg.start();
+                    }
+                    responseJSON.put("success", "1");
                 }
                 response = "[" + responseJSON.toJSONString() + "]";
                 return response;
@@ -784,18 +803,18 @@ public class CryptoNode extends Thread {
                 for (int i = 0; i < n; i++) {
                     transaction q = txQueue.get(i);
                     ArrayList<transaction.input> ii = q.inputs;
-                    int isize = ii.size();                    
+                    int isize = ii.size();
                     for (int j = 0; j < isize; j++) {
                         transaction.input l = ii.get(i);
                         for (int k = 0; k < nn; k++) {
                             if (direct.get(k).prevTxHash.equals(l.prevTxHash) && direct.get(k).output_index == l.output_index) {
-                                
+
                             }
                         }
-                        
+
                     }
-                    
-                }                
+
+                }
 
             }
 
@@ -904,9 +923,9 @@ public class CryptoNode extends Thread {
     public void run() {
         try {
             Thread listen = new listen();
-            listen.start();            
+            listen.start();
             Thread add = new addToDHT();
-            add.start();            
+            add.start();
             Thread otherNodes = new getNodes();
             otherNodes.run();
             Thread getBlocks = new getBlock();
@@ -1092,14 +1111,14 @@ public class CryptoNode extends Thread {
                 request.put("type", "POST");
                 request.put("key", acc_number);
                 request.put("ip", myIp);
-                request.put("publickey", encryptPassword(DatatypeConverter.printBase64Binary(public_key.getEncoded())));               
-                JSONObject response = sendRequest(dhtIp, 60501, request);                
+                request.put("publickey", encryptPassword(DatatypeConverter.printBase64Binary(public_key.getEncoded())));
+                JSONObject response = sendRequest(dhtIp, 60501, request);
                 if (response.get("success").toString().equals("1")) {
-                System.out.println("in success");    
+                    System.out.println("in success");
                     if (response.get("inserted").toString().equals("1")) {
-                          
-                    } else {                        
-                        dhtIp = response.get("address").toString();                        
+
+                    } else {
+                        dhtIp = response.get("address").toString();
                         Thread addNearest = new addToDHT();
                         addNearest.start();
                     }
