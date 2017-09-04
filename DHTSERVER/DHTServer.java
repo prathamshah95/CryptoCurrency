@@ -487,7 +487,7 @@ public class DHTServer extends Thread {
                         backup2.start();
                         responseJson.put("success", "1");
                         responseJson.put("inserted", "1");
-                        
+
                     } else {
                         responseJson.put("success", "1");
                         responseJson.put("inserted", "0");
@@ -510,8 +510,8 @@ public class DHTServer extends Thread {
                 } else {
                     JSONArray nearest = new JSONArray();
                     nearest.add(dhtNodes.get(serverAddress).nodeId);
-                    nearest.add(dhtNodes.get((serverAddress + 1) % dhtNodes.size()).nodeId);
-                    nearest.add(dhtNodes.get((serverAddress - 1) % dhtNodes.size()).nodeId);
+                    nearest.add(dhtNodes.get((serverAddress + dhtNodes.size() + 1) % dhtNodes.size()).nodeId);
+                    nearest.add(dhtNodes.get((serverAddress + dhtNodes.size() - 1) % dhtNodes.size()).nodeId);
                     responseJson.put("nearest", "0");
                     responseJson.put("address", nearest);
                 }
@@ -664,7 +664,7 @@ public class DHTServer extends Thread {
                             JSONObject response = parseJSON(in.readUTF());
                             if (response.get("success").equals("1")) {
                                 node.heartbeat = 0;
-                                System.out.println(node.nodeId);
+                                // System.out.println(node.nodeId);
                             }
                         } catch (Exception ex) {
                             node.heartbeat++;
