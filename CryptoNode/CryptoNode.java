@@ -570,10 +570,8 @@ public class CryptoNode extends Thread {
                 JSONObject requestJSON = parseJSON(request);
                 JSONObject responseJSON = new JSONObject();
                 if (requestJSON.get("inittransaction") != null && requestJSON.get("sender") != null && requestJSON.get("receiver") != null && requestJSON.get("bitcoins") != null) {
-
                     String sender[] = getIPFromacc(requestJSON.get("sender").toString());
                     String receiver[] = getIPFromacc(requestJSON.get("receiver").toString());
-
                     System.out.println(sender + "sender");
                     System.out.println(receiver + "receiver");
                     if (!sender[0].equals("") && !receiver[0].equals("")) {
@@ -590,6 +588,7 @@ public class CryptoNode extends Thread {
                 } else if (requestJSON.get("type").toString().equals("2Phase1")) {
                     Random r = new Random();
                     int commit = r.nextInt(2);
+                    commit=1;
                     responseJSON.put("success", "1");
                     responseJSON.put("ack", commit + "");
                     System.out.println(commit);
@@ -825,8 +824,12 @@ public class CryptoNode extends Thread {
                     JSONObject obj = sendDHTRequest(acc);
                     System.out.println(obj.get("nearest").toString());
                     if (obj.get("nearest").toString().equals("0")) {
+                        System.out.println("hi");
                         dhtIp = ((JSONArray) obj.get("address")).get(0).toString();
+                        System.out.println(dhtIp);
                         JSONObject o = sendDHTRequest(acc);
+                        System.out.println(o.get("ip").toString());
+                        System.out.println(o.get("publickey").toString());
                         s[0] = o.get("ip").toString();
                         s[1] = o.get("publickey").toString();
                         return s;
@@ -901,9 +904,9 @@ public class CryptoNode extends Thread {
     public void run() {
         try {
             Thread listen = new listen();
-            listen.start();
+            listen.start();            
             Thread add = new addToDHT();
-            add.start();
+            add.start();            
             Thread otherNodes = new getNodes();
             otherNodes.run();
             Thread getBlocks = new getBlock();
@@ -1089,13 +1092,14 @@ public class CryptoNode extends Thread {
                 request.put("type", "POST");
                 request.put("key", acc_number);
                 request.put("ip", myIp);
-                request.put("publickey", encryptPassword(DatatypeConverter.printBase64Binary(public_key.getEncoded())));
-                JSONObject response = sendRequest(dhtIp, 60501, request);
+                request.put("publickey", encryptPassword(DatatypeConverter.printBase64Binary(public_key.getEncoded())));               
+                JSONObject response = sendRequest(dhtIp, 60501, request);                
                 if (response.get("success").toString().equals("1")) {
+                System.out.println("in success");    
                     if (response.get("inserted").toString().equals("1")) {
-
-                    } else {
-                        dhtIp = ((JSONArray) response.get("address")).get(0).toString();
+                          
+                    } else {                        
+                        dhtIp = response.get("address").toString();                        
                         Thread addNearest = new addToDHT();
                         addNearest.start();
                     }
